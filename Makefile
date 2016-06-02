@@ -131,18 +131,24 @@ $(TRI1_DIR)/deltas.test.decode.done: | dir/$$(@D)
 
 #Subset data dir
 SEED=777
-NNET_DIR=$(WORK_DIR)/nnet
 
 SPLITS=5
 SPLIT=1
 
-CV_TRAIN=80
+HID_DIM=1024
+NN_DEPTH=2
+D_ORDER=2
+
+CV_TRAIN=20
 CV_HELD=$(shell perl -e 'print 100-$(CV_TRAIN)')
+CV_HELD=20
 
 EXP_DATA=split_$(SPLIT)
 EXP_DATA=less_$(CV_TRAIN)
 
-DBN_DIR=$(NNET_DIR)/$(EXP_DATA)/dnn_dbn
+NNET_INIT_DIR=$(WORK_DIR)/nnet
+NNET_DIR=$(NNET_INIT_DIR)/$(EXP_DATA)
+DBN_DIR=$(NNET_DIR)/d_order_$(D_ORDER)/depth_$(NN_DEPTH)/dim_$(HID_DIM)/dnn_dbn
 
 NNET_TRAIN_CLEAN_DIR=$(NNET_DIR)/train_tr
 NNET_CV_CLEAN_DIR=$(NNET_DIR)/train_cv
@@ -150,23 +156,21 @@ NNET_CV_CLEAN_DIR=$(NNET_DIR)/train_cv
 NNET_TRAIN_DIR=$(NNET_DIR)/train_tr.$(SPLIT)
 NNET_CV_DIR=$(NNET_DIR)/train_cv.$(SPLIT)
 
-split.subset.done: $(NNET_DIR)/split.subset.done
-$(NNET_DIR)/split_$(SPLIT)/dnn_dbn/split.subsed.done: | dir/$$(@D)
+split.subset.done: $(NNET_INIT_DIR)/$(EXP_DATA)/split.subset.done
+$(NNET_INIT_DIR)/split_$(SPLIT)/split.subset.done: | dir/$$(@D)
 	inhouse/subset_data_split.sh --seed $(SEED) --split $(SPLITS) $(TRAIN_DIR) $(NNET_TRAIN_CLEAN_DIR) $(NNET_CV_CLEAN_DIR) 
 	touch $@
 
-$(NNET_DIR)/less_$(SPLIT)/dnn_dbn/split.subsed.done: | dir/$$(@D)
-	utils/subset_data_reduce.sh --seed $(SEED) --cv-spk-percent $(CV_HELD) --tr_spk_percent $(CV_TRAIN) $(TRAIN_DIR) $(NNET_TRAIN_DIR) $(NNET_CV_DIR) 
+$(NNET_INIT_DIR)/less_$(CV_TRAIN)/split.subset.done: | dir/$$(@D)
+	inhouse/subset_data_reduce.sh --cv-spk-percent $(CV_HELD) --tr-spk-percent $(CV_TRAIN) --seed $(SEED) $(TRAIN_DIR) $(NNET_TRAIN_DIR) $(NNET_CV_DIR) 
 	touch $@
 
 CUDA_CMD=run.pl
 dbn.done: $(DBN_DIR)/dbn.done
 
-HID_DIM=1024
-NN_DEPTH=2
 DBN=$(DBN_DIR)/$(NN_DEPTH).dbn
 $(DBN_DIR)/dbn.done: $(NNET_DIR)/split.subset.done | dir/$$(@D)
-	  $(CUDA_CMD) $(DBN_DIR)/log/pretrain_dbn.log steps/nnet/pretrain_dbn.sh --hid_dim $(HID_DIM) --rbm-iter 1 --nn_depth $(NN_DEPTH) $(NNET_TRAIN_DIR) $(DBN_DIR) 
+	  $(CUDA_CMD) $(DBN_DIR)/log/pretrain_dbn.log steps/nnet/pretrain_dbn.sh --hid_dim $(HID_DIM) --rbm-iter 1 --nn_depth $(NN_DEPTH) --delta-opts "--delta-order=$(D_ORDER)" $(NNET_TRAIN_DIR) $(DBN_DIR) 
 	  touch $@
 
 ALI_DIR=$(TRI1_ALI_DIR)
@@ -174,8 +178,7 @@ DBN_DNN_DIR=$(DBN_DIR)_dnn
 
 dbn.train.done: $(DBN_DNN_DIR)/dbn.train.done
 $(DBN_DNN_DIR)/dbn.train.done: $(DBN_DIR)/dbn.done | dir/$$(@D)
-	steps/nnet/train.sh --dbn $(DBN) --hid-layers 0 --learn-rate 0.008 \
-	$(NNET_TRAIN_DIR) $(NNET_CV_DIR) $(LANG_DIR) $(ALI_DIR) $(ALI_DIR) $(DBN_DNN_DIR)
+	steps/nnet/train.sh --dbn $(DBN) --hid-layers 0 --learn-rate 0.008 --delta-opts "--delta-order=$(D_ORDER)" $(NNET_TRAIN_DIR) $(NNET_CV_DIR) $(LANG_DIR) $(ALI_DIR) $(ALI_DIR) $(DBN_DNN_DIR)
 	touch $@
 
 #TODO: make dev data...?

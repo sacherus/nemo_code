@@ -86,6 +86,8 @@ N=$(cat $srcdir/spk2utt | wc -l)
 N_spk_cv=$((N * cv_spk_percent / 100))
 N_spk_trn=$((N * tr_spk_percent / 100))
 
+
+
 mkdir -p $cvdir $trndir
 
 #shuffle the speaker list

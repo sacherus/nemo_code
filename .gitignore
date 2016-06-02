@@ -1,0 +1,11 @@
+*.swp
+data.old
+data2/
+db/
+exp/
+local/
+path.sh
+run.sh
+steps
+utils
+work/
