@@ -112,8 +112,8 @@ $(TRI1_DIR)/deltas.graph.done: | dir/$$(@D)
 
 TRI1_ALI_DIR=$(TRI1_DIR)_ali
 ali.done: $(TRI1_DIR)/ali.done
-$(TRI1_DIR)/ali.done: | dir/$$(@D)
-	  steps/align_si.sh --nj $(NJ) --cmd "$(TRAIN_CMD)" \
+$(TRI1_ALI_DIR)/ali.done: | dir/$$(@D)
+	steps/align_si.sh --nj $(NJ) --cmd "$(TRAIN_CMD)" \
 	      $(TRAIN_DIR) $(LANG_DIR) $(TRI1_DIR) $(TRI1_ALI_DIR)
 	touch $@
 
@@ -149,8 +149,8 @@ $(TRI2_DIR)/lda.graph.done: $(TRI2_DIR)/lda.train.done | dir/$$(@D)
 
 TRI2_ALI_DIR=$(TRI2_DIR)_ali
 ali.done: $(TRI2_DIR)/ali.done
-$(TRI2_DIR)/ali.done: $(TRI2_DIR)/lda.graph.done | dir/$$(@D)
-	  steps/align_si.sh --nj $(NJ) --cmd "$(TRAIN_CMD)" \
+$(TRI2_ALI_DIR)/ali.done: $(TRI2_DIR)/lda.graph.done | dir/$$(@D)
+	steps/align_si.sh --nj $(NJ) --cmd "$(TRAIN_CMD)" \
 	      $(TRAIN_DIR) $(LANG_DIR) $(TRI2_DIR) $(TRI2_ALI_DIR)
 	touch $@
 
@@ -177,7 +177,7 @@ HID_DIM=1024
 NN_DEPTH=2
 D_ORDER=2
 
-CV_TRAIN=80
+CV_TRAIN=20
 CV_HELD=$(shell perl -e 'print 100-$(CV_TRAIN)')
 CV_HELD=20
 
@@ -213,11 +213,12 @@ $(DBN_DIR)/dbn.done: $(NNET_DIR)/split.subset.done | dir/$$(@D)
 	  $(CUDA_CMD) $(DBN_DIR)/log/pretrain_dbn.log steps/nnet/pretrain_dbn.sh --hid_dim $(HID_DIM) --rbm-iter 1 --nn_depth $(NN_DEPTH) --delta-opts "--delta-order=$(D_ORDER)" $(NNET_TRAIN_DIR) $(DBN_DIR) 
 	  touch $@
 
-ALI_DIR=$(TRI1_ALI_DIR)
-DBN_DNN_DIR=$(DBN_DIR)_dnn
+ALI_NAME=tri2_ali
+ALI_DIR=$(EXP_DIR)/$(ALI_NAME)
+DBN_DNN_DIR=$(DBN_DIR)/$(ALI_NAME)
 
 dbn.train.done: $(DBN_DNN_DIR)/dbn.train.done
-$(DBN_DNN_DIR)/dbn.train.done: $(DBN_DIR)/dbn.done | dir/$$(@D)
+$(DBN_DNN_DIR)/dbn.train.done: $(DBN_DIR)/dbn.done $(ALI_DIR)/ali.done | dir/$$(@D)
 	steps/nnet/train.sh --dbn $(DBN) --hid-layers 0 --learn-rate 0.008 --delta-opts "--delta-order=$(D_ORDER)" $(NNET_TRAIN_DIR) $(NNET_CV_DIR) $(LANG_DIR) $(ALI_DIR) $(ALI_DIR) $(DBN_DNN_DIR)
 	touch $@
 
@@ -242,8 +243,7 @@ $(DATA_DIR)/lang.done:
 
 
 GMM_DIR=$(TRI1_DIR)
-DECODE_NNET_NJ=6
-
+DECODE_NNET_NJ=6 
 decode.dev.dnn.done: $(DBN_DNN_DIR)/decode.dev.dnn.done 
 $(DBN_DNN_DIR)/decode.dev.dnn.done: $(DBN_DNN_DIR)/dbn.train.done
 	steps/nnet/decode.sh --nj $(DECODE_NNET_NJ) --cmd "$(DECODE_CMD)" --config conf/decode_dnn.config --acwt 0.1 $(GMM_DIR)/graph_nosp $(DEV_DIR) $(DBN_DNN_DIR)/decode_dev
