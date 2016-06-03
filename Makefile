@@ -128,6 +128,44 @@ $(TRI1_DIR)/deltas.test.decode.done: | dir/$$(@D)
 	  $(TRI1_GRAPH_DIR) $(TEST_DIR) $(TRI1_DEC_TEST_DIR)
 	touch $@
 
+TRI2_DIR=$(EXP_DIR)/tri2
+TEST_LANG_DIR=$(LANG_DIR)_test
+TRI2_GRAPH_DIR=$(TRI2_DIR)/graph_nosp
+TRI2_DEC_TEST_DIR=$(TRI2_DIR)/decode_nosp_test
+TRI2_DEC_DEV_DIR=$(TRI2_DIR)/decode_nosp_dev
+
+lda.test.decode.done: $(TRI2_DIR)/lda.test.decode.done
+lda.dev.decode.done: $(TRI2_DIR)/lda.dev.decode.done
+lda.train.done: $(TRI2_DIR)/lda.train.done
+
+$(TRI2_DIR)/lda.train.done: $(TRI1_DIR)/deltas.train.done| dir/$$(@D)
+	steps/train_lda_mllt.sh --cmd "$(TRAIN_CMD)" \
+	  5000 50000 $(TRAIN_DIR) $(LANG_DIR) $(TRI1_ALI_DIR) $(TRI2_DIR)
+	touch $@
+	
+$(TRI2_DIR)/lda.graph.done: $(TRI2_DIR)/lda.train.done | dir/$$(@D)
+	utils/mkgraph.sh $(TEST_LANG_DIR) $(TRI2_DIR) $(TRI2_GRAPH_DIR)
+	touch $@
+
+TRI2_ALI_DIR=$(TRI2_DIR)_ali
+ali.done: $(TRI2_DIR)/ali.done
+$(TRI2_DIR)/ali.done: $(TRI2_DIR)/lda.graph.done | dir/$$(@D)
+	  steps/align_si.sh --nj $(NJ) --cmd "$(TRAIN_CMD)" \
+	      $(TRAIN_DIR) $(LANG_DIR) $(TRI2_DIR) $(TRI2_ALI_DIR)
+	touch $@
+
+$(TRI2_DIR)/lda.dev.decode.done: $(TRI2_DIR)/ali.done | dir/$$(@D)
+	steps/decode.sh --nj 1 --cmd "$(DEC_CMD)" --num-threads 12 \
+	  $(TRI2_GRAPH_DIR) $(DEV_DIR) $(TRI2_DEC_DEV_DIR)
+	touch $@
+	
+$(TRI2_DIR)/lda.test.decode.done: $(TRI2_DIR)/lda.dev.decode.done | dir/$$(@D)
+	steps/decode.sh --nj 1 --cmd "$(DEC_CMD)" \
+	  --num-threads 12 \
+	  $(TRI2_GRAPH_DIR) $(TEST_DIR) $(TRI2_DEC_TEST_DIR)
+	touch $@
+
+
 
 #Subset data dir
 SEED=777
@@ -139,12 +177,14 @@ HID_DIM=1024
 NN_DEPTH=2
 D_ORDER=2
 
-CV_TRAIN=20
+CV_TRAIN=80
 CV_HELD=$(shell perl -e 'print 100-$(CV_TRAIN)')
 CV_HELD=20
 
 EXP_DATA=split_$(SPLIT)
 EXP_DATA=less_$(CV_TRAIN)
+
+
 
 NNET_INIT_DIR=$(WORK_DIR)/nnet
 NNET_DIR=$(NNET_INIT_DIR)/$(EXP_DATA)
@@ -202,7 +242,7 @@ $(DATA_DIR)/lang.done:
 
 
 GMM_DIR=$(TRI1_DIR)
-DECODE_NNET_NJ=8
+DECODE_NNET_NJ=6
 
 decode.dev.dnn.done: $(DBN_DNN_DIR)/decode.dev.dnn.done 
 $(DBN_DNN_DIR)/decode.dev.dnn.done: $(DBN_DNN_DIR)/dbn.train.done
