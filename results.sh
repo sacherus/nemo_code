@@ -8,6 +8,8 @@ exp_dir=work/nnet/split_*/dnn_dbn_dnn
 exp_dir=work/nnet/less_20/d_order_2/depth_2/dim_1024/dnn_dbn_dnn
 exp_dir=exp/tri2
 
+exp_dir=work/nnet/less_80/d_order_2/depth_2/dim_1024/dnn_dbn_dnn
+
 for x in $exp_dir/decode*; do [ -d $x ] && grep WER $x/wer_* | utils/best_wer.sh; done 2>/dev/null
   for x in $exp_dir/decode*; do [ -d $x ] && grep Sum $x/score_*/*.sys | utils/best_wer.sh; done 2>/dev/null | grep $filter_regexp
 exit 0

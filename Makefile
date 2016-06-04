@@ -147,6 +147,7 @@ $(TRI2_DIR)/lda.graph.done: $(TRI2_DIR)/lda.train.done | dir/$$(@D)
 	utils/mkgraph.sh $(TEST_LANG_DIR) $(TRI2_DIR) $(TRI2_GRAPH_DIR)
 	touch $@
 
+THREADS=12
 TRI2_ALI_DIR=$(TRI2_DIR)_ali
 ali.done: $(TRI2_DIR)/ali.done
 $(TRI2_ALI_DIR)/ali.done: $(TRI2_DIR)/lda.graph.done | dir/$$(@D)
@@ -155,13 +156,13 @@ $(TRI2_ALI_DIR)/ali.done: $(TRI2_DIR)/lda.graph.done | dir/$$(@D)
 	touch $@
 
 $(TRI2_DIR)/lda.dev.decode.done: $(TRI2_DIR)/ali.done | dir/$$(@D)
-	steps/decode.sh --nj 1 --cmd "$(DEC_CMD)" --num-threads 12 \
-	  $(TRI2_GRAPH_DIR) $(DEV_DIR) $(TRI2_DEC_DEV_DIR)
+	steps/decode.sh --nj 1 --cmd "$(DEC_CMD)" --num-threads $(THREADS) \
+	$(TRI2_GRAPH_DIR) $(DEV_DIR) $(TRI2_DEC_DEV_DIR)
 	touch $@
 	
 $(TRI2_DIR)/lda.test.decode.done: $(TRI2_DIR)/lda.dev.decode.done | dir/$$(@D)
 	steps/decode.sh --nj 1 --cmd "$(DEC_CMD)" \
-	  --num-threads 12 \
+	  --num-threads $(THREADS) \
 	  $(TRI2_GRAPH_DIR) $(TEST_DIR) $(TRI2_DEC_TEST_DIR)
 	touch $@
 
@@ -175,6 +176,10 @@ SPLIT=1
 
 HID_DIM=1024
 NN_DEPTH=2
+
+#HID_DIM=2048
+#NN_DEPTH=6
+
 D_ORDER=2
 
 CV_TRAIN=20
@@ -184,7 +189,8 @@ CV_HELD=20
 EXP_DATA=split_$(SPLIT)
 EXP_DATA=less_$(CV_TRAIN)
 
-
+DATA_LDA_DIR=data-lda
+DATA_DIR=$(DATA_LDA_DIR)
 
 NNET_INIT_DIR=$(WORK_DIR)/nnet
 NNET_DIR=$(NNET_INIT_DIR)/$(EXP_DATA)
@@ -205,21 +211,27 @@ $(NNET_INIT_DIR)/less_$(CV_TRAIN)/split.subset.done: | dir/$$(@D)
 	inhouse/subset_data_reduce.sh --cv-spk-percent $(CV_HELD) --tr-spk-percent $(CV_TRAIN) --seed $(SEED) $(TRAIN_DIR) $(NNET_TRAIN_DIR) $(NNET_CV_DIR) 
 	touch $@
 
+$(NNET_INIT_DIR)/$(DATA_LDA_DIR)/less_$(CV_TRAIN)/split.subset.done: | dir/$$(@D)
+	inhouse/subset_data_reduce.sh --cv-spk-percent $(CV_HELD) --tr-spk-percent $(CV_TRAIN) --seed $(SEED) $(DATA_LDA_DIR)/train $(NNET_TRAIN_DIR) $(NNET_CV_DIR) 
+	touch $@
+
 CUDA_CMD=run.pl
 dbn.done: $(DBN_DIR)/dbn.done
 
+FEATURE_TRANSFORM_DBN=$(DBN_DIR)/final.feature_transform 
 DBN=$(DBN_DIR)/$(NN_DEPTH).dbn
 $(DBN_DIR)/dbn.done: $(NNET_DIR)/split.subset.done | dir/$$(@D)
-	  $(CUDA_CMD) $(DBN_DIR)/log/pretrain_dbn.log steps/nnet/pretrain_dbn.sh --hid_dim $(HID_DIM) --rbm-iter 1 --nn_depth $(NN_DEPTH) --delta-opts "--delta-order=$(D_ORDER)" $(NNET_TRAIN_DIR) $(DBN_DIR) 
+	  $(CUDA_CMD) $(DBN_DIR)/log/pretrain_dbn.log steps/nnet/pretrain_dbn.sh --hid_dim $(HID_DIM) --rbm-iter 1 --nn_depth $(NN_DEPTH)  $(NNET_TRAIN_DIR) $(DBN_DIR) 
 	  touch $@
 
 ALI_NAME=tri2_ali
 ALI_DIR=$(EXP_DIR)/$(ALI_NAME)
 DBN_DNN_DIR=$(DBN_DIR)/$(ALI_NAME)
 
+FEATURE_TRANSFORM_DNN=$(DBN_DIR)/final.feature_transform 
 dbn.train.done: $(DBN_DNN_DIR)/dbn.train.done
 $(DBN_DNN_DIR)/dbn.train.done: $(DBN_DIR)/dbn.done $(ALI_DIR)/ali.done | dir/$$(@D)
-	steps/nnet/train.sh --dbn $(DBN) --hid-layers 0 --learn-rate 0.008 --delta-opts "--delta-order=$(D_ORDER)" $(NNET_TRAIN_DIR) $(NNET_CV_DIR) $(LANG_DIR) $(ALI_DIR) $(ALI_DIR) $(DBN_DNN_DIR)
+	steps/nnet/train.sh --dbn $(DBN) --hid-layers 0 --learn-rate 0.008 --feature-transform $(FEATURE_TRANSFORM_DNN) $(NNET_TRAIN_DIR) $(NNET_CV_DIR) $(LANG_DIR) $(ALI_DIR) $(ALI_DIR) $(DBN_DNN_DIR)
 	touch $@
 
 #TODO: make dev data...?
@@ -240,10 +252,8 @@ $(DATA_DIR)/lang.done:
 	cp $(DATA)/lang_nosp_rescore/G.carpa $(DATA)/lang_rescore touch 
 	$@
 
-
-
 GMM_DIR=$(TRI1_DIR)
-DECODE_NNET_NJ=6 
+DECODE_NNET_NJ=6
 decode.dev.dnn.done: $(DBN_DNN_DIR)/decode.dev.dnn.done 
 $(DBN_DNN_DIR)/decode.dev.dnn.done: $(DBN_DNN_DIR)/dbn.train.done
 	steps/nnet/decode.sh --nj $(DECODE_NNET_NJ) --cmd "$(DECODE_CMD)" --config conf/decode_dnn.config --acwt 0.1 $(GMM_DIR)/graph_nosp $(DEV_DIR) $(DBN_DNN_DIR)/decode_dev
@@ -252,4 +262,12 @@ $(DBN_DNN_DIR)/decode.dev.dnn.done: $(DBN_DNN_DIR)/dbn.train.done
 decode.test.dnn.done: $(DBN_DNN_DIR)/decode.test.dnn.done
 $(DBN_DNN_DIR)/decode.test.dnn.done: $(DBN_DNN_DIR)/decode.dev.dnn.done
 	steps/nnet/decode.sh --nj $(DECODE_NNET_NJ) --cmd "$(DECODE_CMD)" --config conf/decode_dnn.config --acwt 0.1 $(GMM_DIR)/graph_nosp $(TEST_DIR) $(DBN_DNN_DIR)/decode_test
+	touch $@
+
+
+MAT_LDA_GMM_DIR=$(TRI2_ALI_DIR)
+lda.feats.done:
+	for dir in $(DATA_DIRS); do \
+	name=$(DATA_LDA_DIR)/`basename $$dir`; \ 
+	inhouse/make_lda_feats.sh --nj 6 $$name $$dir $(MAT_LDA_GMM_DIR) $$name/log $$name/data; done
 	touch $@
