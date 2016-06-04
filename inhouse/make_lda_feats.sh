@@ -74,8 +74,9 @@ $cmd JOB=1:$nj $logdir/make_lda_feats.JOB.log \
    
 # Merge the scp,
 for n in $(seq 1 $nj); do
-  cat $feadir/feats_fmllr_$name.$n.scp 
+  cat $feadir/feats_lda_$name.$n.scp 
 done > $data/feats.scp
+
 
 echo "$0: Done!, type $srcdata --> $data, using : raw-trans ${raw_transform_dir:-None}, gmm $gmmdir, trans ${transform_dir:-None}"
 

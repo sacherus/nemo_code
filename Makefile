@@ -180,7 +180,7 @@ NN_DEPTH=2
 #HID_DIM=2048
 #NN_DEPTH=6
 
-D_ORDER=2
+D_ORDER=0
 
 CV_TRAIN=20
 CV_HELD=$(shell perl -e 'print 100-$(CV_TRAIN)')
@@ -189,11 +189,15 @@ CV_HELD=20
 EXP_DATA=split_$(SPLIT)
 EXP_DATA=less_$(CV_TRAIN)
 
-DATA_LDA_DIR=data-lda
-DATA_DIR=$(DATA_LDA_DIR)
+SPLIT_TYPE=less_$(CV_TRAIN)
 
-NNET_INIT_DIR=$(WORK_DIR)/nnet
+DATA_LDA_DIR=data-lda
+DATA_TRANS_DIR=$(DATA_LDA_DIR)
+
+NNET_INIT_DIR=$(WORK_DIR)/nnet/$(DATA_TRANS_DIR)
 NNET_DIR=$(NNET_INIT_DIR)/$(EXP_DATA)
+NNET_SPLIT_DIR=$(NNET_INIT_DIR)/$(SPLIT_TYPE)
+
 DBN_DIR=$(NNET_DIR)/d_order_$(D_ORDER)/depth_$(NN_DEPTH)/dim_$(HID_DIM)/dnn_dbn
 
 NNET_TRAIN_CLEAN_DIR=$(NNET_DIR)/train_tr
@@ -211,7 +215,7 @@ $(NNET_INIT_DIR)/less_$(CV_TRAIN)/split.subset.done: | dir/$$(@D)
 	inhouse/subset_data_reduce.sh --cv-spk-percent $(CV_HELD) --tr-spk-percent $(CV_TRAIN) --seed $(SEED) $(TRAIN_DIR) $(NNET_TRAIN_DIR) $(NNET_CV_DIR) 
 	touch $@
 
-$(NNET_INIT_DIR)/$(DATA_LDA_DIR)/less_$(CV_TRAIN)/split.subset.done: | dir/$$(@D)
+$(WORK_DIR)/nnet/$(DATA_LDA_DIR)/less_$(CV_TRAIN)/split.subset.done: | dir/$$(@D)
 	inhouse/subset_data_reduce.sh --cv-spk-percent $(CV_HELD) --tr-spk-percent $(CV_TRAIN) --seed $(SEED) $(DATA_LDA_DIR)/train $(NNET_TRAIN_DIR) $(NNET_CV_DIR) 
 	touch $@
 
@@ -220,8 +224,10 @@ dbn.done: $(DBN_DIR)/dbn.done
 
 FEATURE_TRANSFORM_DBN=$(DBN_DIR)/final.feature_transform 
 DBN=$(DBN_DIR)/$(NN_DEPTH).dbn
-$(DBN_DIR)/dbn.done: $(NNET_DIR)/split.subset.done | dir/$$(@D)
-	  $(CUDA_CMD) $(DBN_DIR)/log/pretrain_dbn.log steps/nnet/pretrain_dbn.sh --hid_dim $(HID_DIM) --rbm-iter 1 --nn_depth $(NN_DEPTH)  $(NNET_TRAIN_DIR) $(DBN_DIR) 
+
+dbn.done: $(DBN_DIR)/dbn.done
+$(DBN_DIR)/dbn.done: $(NNET_SPLIT_DIR)/split.subset.done | dir/$$(@D)
+	  $(CUDA_CMD) $(DBN_DIR)/log/pretrain_dbn.log steps/nnet/pretrain_dbn.sh --hid_dim $(HID_DIM) --rbm-iter 1 --nn_depth $(NN_DEPTH) $(NNET_TRAIN_DIR) $(DBN_DIR) 
 	  touch $@
 
 ALI_NAME=tri2_ali
@@ -266,8 +272,10 @@ $(DBN_DNN_DIR)/decode.test.dnn.done: $(DBN_DNN_DIR)/decode.dev.dnn.done
 
 
 MAT_LDA_GMM_DIR=$(TRI2_ALI_DIR)
-lda.feats.done:
+lda.feats.done: $(DATA_LDA_DIR)/lda.feats.done
+
+$(DATA_LDA_DIR)/lda.feats.done:
 	for dir in $(DATA_DIRS); do \
-	name=$(DATA_LDA_DIR)/`basename $$dir`; \ 
+	name=$(DATA_LDA_DIR)/`basename $$dir`; \
 	inhouse/make_lda_feats.sh --nj 6 $$name $$dir $(MAT_LDA_GMM_DIR) $$name/log $$name/data; done
 	touch $@
