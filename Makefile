@@ -230,7 +230,8 @@ $(DBN_DIR)/dbn.done: $(NNET_SPLIT_DIR)/split.subset.done | dir/$$(@D)
 	  $(CUDA_CMD) $(DBN_DIR)/log/pretrain_dbn.log steps/nnet/pretrain_dbn.sh --hid_dim $(HID_DIM) --rbm-iter 1 --nn_depth $(NN_DEPTH) $(NNET_TRAIN_DIR) $(DBN_DIR) 
 	  touch $@
 
-ALI_NAME=tri2_ali
+GMM_DIR=$(TRI2_DIR)
+ALI_NAME=$(GMM_DIR)_ali
 ALI_DIR=$(EXP_DIR)/$(ALI_NAME)
 DBN_DNN_DIR=$(DBN_DIR)/$(ALI_NAME)
 
@@ -258,7 +259,6 @@ $(DATA_DIR)/lang.done:
 	cp $(DATA)/lang_nosp_rescore/G.carpa $(DATA)/lang_rescore touch 
 	$@
 
-GMM_DIR=$(TRI1_DIR)
 DECODE_NNET_NJ=6
 decode.dev.dnn.done: $(DBN_DNN_DIR)/decode.dev.dnn.done 
 $(DBN_DNN_DIR)/decode.dev.dnn.done: $(DBN_DNN_DIR)/dbn.train.done
@@ -272,10 +272,20 @@ $(DBN_DNN_DIR)/decode.test.dnn.done: $(DBN_DNN_DIR)/decode.dev.dnn.done
 
 
 MAT_LDA_GMM_DIR=$(TRI2_ALI_DIR)
-lda.feats.done: $(DATA_LDA_DIR)/lda.feats.done
 
+lda.feats.done: $(DATA_LDA_DIR)/lda.feats.done
 $(DATA_LDA_DIR)/lda.feats.done:
 	for dir in $(DATA_DIRS); do \
 	name=$(DATA_LDA_DIR)/`basename $$dir`; \
-	inhouse/make_lda_feats.sh --nj 6 $$name $$dir $(MAT_LDA_GMM_DIR) $$name/log $$name/data; done
+	inhouse/make_lda_feats.sh --nj $(DECODE_NNET_NJ) $$name $$dir $(MAT_LDA_GMM_DIR) $$name/log $$name/data; done
+	touch $@
+
+fbank.feats.done: $(DATA_LDA_DIR)/fbank.feats.done
+DATA_FBANK_DIR=data-fbank
+$(DATA_FBANK_DIR)/fbank.feats.done:
+	for source_dir in $(DATA_DIRS); do \
+	target_dir=$(DATA_LDA_DIR)/`basename $$source_dir`; \
+	utils/copy_data_dir.sh $$source_dir $$target_dir;  rm $$target_dir/{cmvn,feats}.scp; \
+	steps/make_fbank_pitch.sh --nj $(DECODE_NNET_NJ) $$target_dir $$target_dir/log $$target_dir/data; \
+	steps/compute_cmvn_stats.sh $$target_dir $$target_dir/log $$target_dir/data; done
 	touch $@
