@@ -193,8 +193,8 @@ SPLIT_TYPE=less_$(CV_TRAIN)
 
 DATA_LDA_DIR=data-lda
 DATA_FBANK_DIR=data-fbank
-DATA_TRANS_DIR=$(DATA_LDA_DIR)
 DATA_TRANS_DIR=$(DATA_FBANK_DIR)
+DATA_TRANS_DIR=$(DATA_LDA_DIR)
 
 NNET_INIT_DIR=$(WORK_DIR)/nnet/$(DATA_TRANS_DIR)
 NNET_DIR=$(NNET_INIT_DIR)/$(EXP_DATA)
@@ -233,7 +233,7 @@ DBN=$(DBN_DIR)/$(NN_DEPTH).dbn
 
 dbn.done: $(DBN_DIR)/dbn.done
 $(DBN_DIR)/dbn.done: $(NNET_SPLIT_DIR)/split.subset.done | dir/$$(@D)
-	  $(CUDA_CMD) $(DBN_DIR)/log/pretrain_dbn.log steps/nnet/pretrain_dbn.sh --hid_dim $(HID_DIM) --rbm-iter 1 --nn_depth $(NN_DEPTH) $(NNET_TRAIN_DIR) $(DBN_DIR) 
+	  $(CUDA_CMD) $(DBN_DIR)/log/pretrain_dbn.log steps/nnet/pretrain_dbn.sh --delta-opts "--delta-order=$(D_ORDER)" --hid_dim $(HID_DIM) --rbm-iter 1 --nn_depth $(NN_DEPTH) $(NNET_TRAIN_DIR) $(DBN_DIR) 
 	  touch $@
 
 GMM_DIR=$(TRI2_DIR)
@@ -251,21 +251,22 @@ $(DBN_DNN_DIR)/dbn.train.done: $(DBN_DIR)/dbn.done $(ALI_DIR)/ali.done | dir/$$(
 #QA lang vs lang_nosp
 
 LOCAL_DICT_DIR=$(LOCAL_DIR)/dict
-lang.done: $(DATA_DIR)/lang.done
-$(DATA_DIR)/lang.done:
-	steps/get_prons.sh --cmd "$(TRAIN_CMD)" $(TRAIN_DIR) $(LANG_DIR) $(TRI1_DIR)
+lang2.done: $(DATA_DIR)/lang2.done
+$(DATA_DIR)/lang2.done:
+	steps/get_prons.sh --cmd "$(TRAIN_CMD)" $(TRAIN_DIR) $(LANG_DIR) $(TRI2_DIR)
 	utils/dict_dir_add_pronprobs.sh --max-normalize true \
-	$(LOCAL_DIR)/dict_nosp $(TRI1_DIR)/pron_counts_nowb.txt \
-	$(TRI1_DIR)/sil_counts_nowb.txt \
-	$(TRI1_DIR)/pron_bigram_counts_nowb.txt $(LOCAL_DICT_DIR)
+	$(LOCAL_DIR)/dict_nosp $(TRI2_DIR)/pron_counts_nowb.txt $(TRI2_DIR)/sil_counts_nowb.txt $(TRI2_DIR)/pron_bigram_counts_nowb.txt $(LOCAL_DICT_DIR)
 	utils/prepare_lang.sh $(LOCAL_DICT_DIR) "<unk>" $(DATA_DIR)/local/lang $(DATA_DIR)/lang
-	cp -rT $(DATA)/lang $(DATA)/lang_test
-	cp -rT $(DATA)/lang $(DATA)/lang_rescore
-	cp $(DATA)/lang_nosp_test/G.fst $(DATA)/lang_test
-	cp $(DATA)/lang_nosp_rescore/G.carpa $(DATA)/lang_rescore touch 
-	$@
+	cp -rT $(DATA_DIR)/lang $(DATA_DIR)/lang_test
+	cp -rT $(DATA_DIR)/lang $(DATA_DIR)/lang_rescore
+	cp $(DATA_DIR)/lang_nosp_test/G.fst $(DATA_DIR)/lang_test
+	cp $(DATA_DIR)/lang_nosp_rescore/G.carpa $(DATA_DIR)/lang_rescore
+	utils/mkgraph.sh $(DATA_DIR)/lang_test exp/tri2 exp/tri2/graph 
+	touch $@
 
 DECODE_NNET_NJ=6
+GRAPH_TYPE=graph
+GRAPH_TYPE=graph_nosp
 decode.dev.dnn.done: $(DBN_DNN_DIR)/decode.dev.dnn.done 
 $(DBN_DNN_DIR)/decode.dev.dnn.done: $(DBN_DNN_DIR)/dbn.train.done
 	steps/nnet/decode.sh --nj $(DECODE_NNET_NJ) --cmd "$(DECODE_CMD)" --config conf/decode_dnn.config --acwt 0.1 $(GMM_DIR)/graph_nosp $(DATA_TRANS_DIR)/dev $(DBN_DNN_DIR)/decode_dev
