@@ -10,6 +10,13 @@ exp_dir=exp/tri2
 
 exp_dir=work/nnet/less_80/d_order_2/depth_2/dim_1024/dnn_dbn_dnn
 
+exp_dir=work/nnet/less_20/d_order_2/depth_2/dim_1024/dnn_dbn/tri2_ali
+exp_dir=work/nnet/less_80/d_order_2/depth_6/dim_2048/dnn_dbn/tri2_ali
+exp_dir=work/nnet/data-lda/less_80/d_order_0/depth_2/dim_1024/dnn_dbn/tri2_ali
+exp_dir=work/nnet/data-fbank/less_20/d_order_2/depth_2/dim_1024/dnn_dbn/tri2_ali
+exp_dir=work/nnet/data-fbank/less_80/d_order_0/depth_2/dim_1024/dnn_dbn/tri2_ali
+exp_dir=work/nnet/data-fbank/less_80/d_order_0/depth_2/dim_1024/dnn_dbn/tri2_ali
+
 for x in $exp_dir/decode*; do [ -d $x ] && grep WER $x/wer_* | utils/best_wer.sh; done 2>/dev/null
   for x in $exp_dir/decode*; do [ -d $x ] && grep Sum $x/score_*/*.sys | utils/best_wer.sh; done 2>/dev/null | grep $filter_regexp
 exit 0

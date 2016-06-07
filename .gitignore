@@ -10,3 +10,6 @@ steps
 utils
 work/
 data-lda/
+db/
+data-fbank
+db

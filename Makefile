@@ -182,7 +182,7 @@ NN_DEPTH=2
 
 D_ORDER=0
 
-CV_TRAIN=20
+CV_TRAIN=80
 CV_HELD=$(shell perl -e 'print 100-$(CV_TRAIN)')
 CV_HELD=20
 
@@ -192,7 +192,9 @@ EXP_DATA=less_$(CV_TRAIN)
 SPLIT_TYPE=less_$(CV_TRAIN)
 
 DATA_LDA_DIR=data-lda
+DATA_FBANK_DIR=data-fbank
 DATA_TRANS_DIR=$(DATA_LDA_DIR)
+DATA_TRANS_DIR=$(DATA_FBANK_DIR)
 
 NNET_INIT_DIR=$(WORK_DIR)/nnet/$(DATA_TRANS_DIR)
 NNET_DIR=$(NNET_INIT_DIR)/$(EXP_DATA)
@@ -219,6 +221,10 @@ $(WORK_DIR)/nnet/$(DATA_LDA_DIR)/less_$(CV_TRAIN)/split.subset.done: | dir/$$(@D
 	inhouse/subset_data_reduce.sh --cv-spk-percent $(CV_HELD) --tr-spk-percent $(CV_TRAIN) --seed $(SEED) $(DATA_LDA_DIR)/train $(NNET_TRAIN_DIR) $(NNET_CV_DIR) 
 	touch $@
 
+$(WORK_DIR)/nnet/$(DATA_FBANK_DIR)/less_$(CV_TRAIN)/split.subset.done: | dir/$$(@D)
+	inhouse/subset_data_reduce.sh --cv-spk-percent $(CV_HELD) --tr-spk-percent $(CV_TRAIN) --seed $(SEED) $(DATA_FBANK_DIR)/train $(NNET_TRAIN_DIR) $(NNET_CV_DIR) 
+	touch $@
+
 CUDA_CMD=run.pl
 dbn.done: $(DBN_DIR)/dbn.done
 
@@ -231,7 +237,7 @@ $(DBN_DIR)/dbn.done: $(NNET_SPLIT_DIR)/split.subset.done | dir/$$(@D)
 	  touch $@
 
 GMM_DIR=$(TRI2_DIR)
-ALI_NAME=$(GMM_DIR)_ali
+ALI_NAME=tri2_ali
 ALI_DIR=$(EXP_DIR)/$(ALI_NAME)
 DBN_DNN_DIR=$(DBN_DIR)/$(ALI_NAME)
 
@@ -262,17 +268,16 @@ $(DATA_DIR)/lang.done:
 DECODE_NNET_NJ=6
 decode.dev.dnn.done: $(DBN_DNN_DIR)/decode.dev.dnn.done 
 $(DBN_DNN_DIR)/decode.dev.dnn.done: $(DBN_DNN_DIR)/dbn.train.done
-	steps/nnet/decode.sh --nj $(DECODE_NNET_NJ) --cmd "$(DECODE_CMD)" --config conf/decode_dnn.config --acwt 0.1 $(GMM_DIR)/graph_nosp $(DEV_DIR) $(DBN_DNN_DIR)/decode_dev
+	steps/nnet/decode.sh --nj $(DECODE_NNET_NJ) --cmd "$(DECODE_CMD)" --config conf/decode_dnn.config --acwt 0.1 $(GMM_DIR)/graph_nosp $(DATA_TRANS_DIR)/dev $(DBN_DNN_DIR)/decode_dev
 	touch $@
 
 decode.test.dnn.done: $(DBN_DNN_DIR)/decode.test.dnn.done
 $(DBN_DNN_DIR)/decode.test.dnn.done: $(DBN_DNN_DIR)/decode.dev.dnn.done
-	steps/nnet/decode.sh --nj $(DECODE_NNET_NJ) --cmd "$(DECODE_CMD)" --config conf/decode_dnn.config --acwt 0.1 $(GMM_DIR)/graph_nosp $(TEST_DIR) $(DBN_DNN_DIR)/decode_test
+	steps/nnet/decode.sh --nj $(DECODE_NNET_NJ) --cmd "$(DECODE_CMD)" --config conf/decode_dnn.config --acwt 0.1 $(GMM_DIR)/graph_nosp $(DATA_TRANS_DIR)/test $(DBN_DNN_DIR)/decode_test
 	touch $@
 
 
 MAT_LDA_GMM_DIR=$(TRI2_ALI_DIR)
-
 lda.feats.done: $(DATA_LDA_DIR)/lda.feats.done
 $(DATA_LDA_DIR)/lda.feats.done:
 	for dir in $(DATA_DIRS); do \
@@ -280,11 +285,10 @@ $(DATA_LDA_DIR)/lda.feats.done:
 	inhouse/make_lda_feats.sh --nj $(DECODE_NNET_NJ) $$name $$dir $(MAT_LDA_GMM_DIR) $$name/log $$name/data; done
 	touch $@
 
-fbank.feats.done: $(DATA_LDA_DIR)/fbank.feats.done
-DATA_FBANK_DIR=data-fbank
+fbank.feats.done: $(DATA_FBANK_DIR)/fbank.feats.done
 $(DATA_FBANK_DIR)/fbank.feats.done:
 	for source_dir in $(DATA_DIRS); do \
-	target_dir=$(DATA_LDA_DIR)/`basename $$source_dir`; \
+	target_dir=$(@D)/`basename $$source_dir`; \
 	utils/copy_data_dir.sh $$source_dir $$target_dir;  rm $$target_dir/{cmvn,feats}.scp; \
 	steps/make_fbank_pitch.sh --nj $(DECODE_NNET_NJ) $$target_dir $$target_dir/log $$target_dir/data; \
 	steps/compute_cmvn_stats.sh $$target_dir $$target_dir/log $$target_dir/data; done
