@@ -15,13 +15,18 @@ exp_dir=work/nnet/less_80/d_order_2/depth_6/dim_2048/dnn_dbn/tri2_ali
 exp_dir=work/nnet/data-fbank/less_20/d_order_2/depth_2/dim_1024/dnn_dbn/tri2_ali
 exp_dir=work/nnet/data-fbank/less_80/d_order_0/depth_2/dim_1024/dnn_dbn/tri2_ali
 exp_dir=work/nnet/data-fbank/less_80/d_order_0/depth_2/dim_1024/dnn_dbn/tri2_ali
-exp_dir=work/nnet/data-lda/less_80/d_order_0/depth_2/dim_1024/dnn_dbn/tri2_ali
 exp_dir=work/nnet/data-fbank/less_20/d_order_2/depth_2/dim_1024/dnn_dbn/tri2_ali
+exp_dir=work/nnet/data-fbank/less_80/d_order_2/depth_2/dim_1024/dnn_dbn/tri2_ali
+exp_dir=work/nnet/data-lda/less_20/d_order_2/depth_2/dim_1024/dnn_dbn/tri2_ali
+exp_dir=work/nnet/data-lda/less_80/d_order_0/depth_2/dim_1024/dnn_dbn/tri2_ali
+exp_dir=work/nnet/data-lda/less_80/d_order_0/depth_2/dim_1024/dnn_dbn/tri2_ali
 
 for x in $exp_dir/decode*; do [ -d $x ] && grep WER $x/wer_* | utils/best_wer.sh; done 2>/dev/null
   for x in $exp_dir/decode*; do [ -d $x ] && grep Sum $x/score_*/*.sys | utils/best_wer.sh; done 2>/dev/null | grep $filter_regexp
-exit 0
 
+for x in $exp_dir/graph_decode*; do [ -d $x ] && grep WER $x/wer_* | utils/best_wer.sh; done 2>/dev/null
+  for x in $exp_dir/graph_decode*; do [ -d $x ] && grep Sum $x/score_*/*.sys | utils/best_wer.sh; done 2>/dev/null | grep $filter_regexp
+exit 0
 # Results from Nikolay, using kaldi scoring:
 # %WER 35.17 [ 9677 / 27512, 1267 ins, 1681 del, 6729 sub ] exp/tri1/decode/wer_13
 # %WER 30.03 [ 8262 / 27512, 1255 ins, 1367 del, 5640 sub ] exp/tri2/decode/wer_15

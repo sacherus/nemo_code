@@ -193,8 +193,8 @@ SPLIT_TYPE=less_$(CV_TRAIN)
 
 DATA_LDA_DIR=data-lda
 DATA_FBANK_DIR=data-fbank
-DATA_TRANS_DIR=$(DATA_FBANK_DIR)
 DATA_TRANS_DIR=$(DATA_LDA_DIR)
+DATA_TRANS_DIR=$(DATA_FBANK_DIR)
 
 NNET_INIT_DIR=$(WORK_DIR)/nnet/$(DATA_TRANS_DIR)
 NNET_DIR=$(NNET_INIT_DIR)/$(EXP_DATA)
@@ -264,17 +264,18 @@ $(DATA_DIR)/lang2.done:
 	utils/mkgraph.sh $(DATA_DIR)/lang_test exp/tri2 exp/tri2/graph 
 	touch $@
 
-DECODE_NNET_NJ=6
+DECODE_NNET_NJ=2
 GRAPH_TYPE=graph
 GRAPH_TYPE=graph_nosp
-decode.dev.dnn.done: $(DBN_DNN_DIR)/decode.dev.dnn.done 
-$(DBN_DNN_DIR)/decode.dev.dnn.done: $(DBN_DNN_DIR)/dbn.train.done
-	steps/nnet/decode.sh --nj $(DECODE_NNET_NJ) --cmd "$(DECODE_CMD)" --config conf/decode_dnn.config --acwt 0.1 $(GMM_DIR)/graph_nosp $(DATA_TRANS_DIR)/dev $(DBN_DNN_DIR)/decode_dev
+DECODE_NNET_DIR=$(DBN_DNN_DIR)/$(GRAPH_TYPE)
+decode.dev.dnn.done: $(DECODE_NNET_DIR)/decode.dev.dnn.done 
+$(DECODE_NNET_DIR)/decode.dev.dnn.done: $(DBN_DNN_DIR)/dbn.train.done
+	steps/nnet/decode.sh --nj $(DECODE_NNET_NJ) --cmd "$(DECODE_CMD)" --config conf/decode_dnn.config --acwt 0.1 $(GMM_DIR)/$(GRAPH_TYPE) $(DATA_TRANS_DIR)/dev $(DBN_DNN_DIR)/$(GRAPH_TYPE)_decode_dev
 	touch $@
 
-decode.test.dnn.done: $(DBN_DNN_DIR)/decode.test.dnn.done
-$(DBN_DNN_DIR)/decode.test.dnn.done: $(DBN_DNN_DIR)/decode.dev.dnn.done
-	steps/nnet/decode.sh --nj $(DECODE_NNET_NJ) --cmd "$(DECODE_CMD)" --config conf/decode_dnn.config --acwt 0.1 $(GMM_DIR)/graph_nosp $(DATA_TRANS_DIR)/test $(DBN_DNN_DIR)/decode_test
+decode.test.dnn.done: $(DECODE_NNET_DIR)/decode.test.dnn.done
+$(DECODE_NNET_DIR)/decode.test.dnn.done: $(DECODE_NNET_DIR)/decode.dev.dnn.done
+	steps/nnet/decode.sh --nj $(DECODE_NNET_NJ) --cmd "$(DECODE_CMD)" --config conf/decode_dnn.config --acwt 0.1 $(GMM_DIR)/$(GRAPH_TYPE) $(DATA_TRANS_DIR)/test $(DBN_DNN_DIR)/$(GRAPH_TYPE)_decode_test
 	touch $@
 
 
