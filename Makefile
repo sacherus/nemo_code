@@ -182,7 +182,7 @@ NN_DEPTH=2
 
 D_ORDER=0
 
-CV_TRAIN=80
+CV_TRAIN=20
 CV_HELD=$(shell perl -e 'print 100-$(CV_TRAIN)')
 CV_HELD=20
 
@@ -200,7 +200,13 @@ NNET_INIT_DIR=$(WORK_DIR)/nnet/$(DATA_TRANS_DIR)
 NNET_DIR=$(NNET_INIT_DIR)/$(EXP_DATA)
 NNET_SPLIT_DIR=$(NNET_INIT_DIR)/$(SPLIT_TYPE)
 
-DBN_DIR=$(NNET_DIR)/d_order_$(D_ORDER)/depth_$(NN_DEPTH)/dim_$(HID_DIM)/dnn_dbn
+DBN_PRE_DIR=$(NNET_DIR)/d_order_$(D_ORDER)/depth_$(NN_DEPTH)/dim_$(HID_DIM)
+PRETRAIN_TYPE=dnn_dbn
+PRETRAIN_TYPE=no_pre
+PRETRAIN_TYPE=lstm
+PRETRAIN_TYPE=auto
+PRETRAIN_TYPE=cnn
+DBN_DIR=$(DBN_PRE_DIR)/$(PRETRAIN_TYPE)
 
 NNET_TRAIN_CLEAN_DIR=$(NNET_DIR)/train_tr
 NNET_CV_CLEAN_DIR=$(NNET_DIR)/train_cv
@@ -232,8 +238,26 @@ FEATURE_TRANSFORM_DBN=$(DBN_DIR)/final.feature_transform
 DBN=$(DBN_DIR)/$(NN_DEPTH).dbn
 
 dbn.done: $(DBN_DIR)/dbn.done
-$(DBN_DIR)/dbn.done: $(NNET_SPLIT_DIR)/split.subset.done | dir/$$(@D)
-	  $(CUDA_CMD) $(DBN_DIR)/log/pretrain_dbn.log steps/nnet/pretrain_dbn.sh --delta-opts "--delta-order=$(D_ORDER)" --hid_dim $(HID_DIM) --rbm-iter 1 --nn_depth $(NN_DEPTH) $(NNET_TRAIN_DIR) $(DBN_DIR) 
+$(DBN_PRE_DIR)/dnn_dbn/dbn.done: $(NNET_SPLIT_DIR)/split.subset.done | dir/$$(@D)
+	  $(CUDA_CMD) $(DBN_DIR)/log/pretrain_dbn.log steps/nnet/pretrain_dbn.sh --delta-opts "--delta-order=$(D_ORDER)" --hid_dim $(HID_DIM) --rbm-iter 1 --nn_depth $(NN_DEPTH) $(NNET_TRAIN_DIR) $@
+	  touch $@
+
+auto.done: $(DBN_PRE_DIR)/auto/dbn.done
+$(DBN_PRE_DIR)/auto/dbn.done: $(NNET_SPLIT_DIR)/split.subset.done | dir/$$(@D)
+	#labels="add-deltas --delta-order=$(D_ORDER) scp:$(NNET_TRAIN_DIR)/feats.scp ark:- | steps/nnet/train.sh --left-context 5 --right-context 5 ark:- ark:- | ark:feat-to-post ark:- ark:- | "; 
+	#steps/nnet/train.sh --delta-opts "--delta-order=$(D_ORDER)" --hid-layers $(NN_DEPTH) --hid-dim $(HID_DIM) --learn-rate 0.00001
+	labels_tr="ark:feat-to-post scp:$(NNET_TRAIN_DIR)/feats.scp ark:- |"; \
+	labels_cv="ark:feat-to-post scp:$(NNET_CV_DIR)/feats.scp ark:- |"; \
+	steps/nnet/train.sh --hid-layers $(NN_DEPTH) --hid-dim $(HID_DIM) --learn-rate 0.00001 \
+	--labels_tr "$$labels_tr" --labels_cv "$$labels_cv" --num-tgt 40 --train-tool "nnet-train-frmshuff --objective-function=mse" \
+	--proto-opts "--no-softmax --activation-type=<Tanh> --hid-bias-mean=0.0 --hid-bias-range=1.0 --param-stddev-factor=0.01" \
+	$(NNET_TRAIN_DIR) $(NNET_CV_DIR) dummy-dir dummy-dir dummy-dir $(@D)
+	#touch $@
+
+$(DBN_PRE_DIR)/no_pre/dbn.done: $(NNET_SPLIT_DIR)/split.subset.done | dir/$$(@D)
+	  touch $@
+
+$(DBN_PRE_DIR)/cnn/dbn.done: $(NNET_SPLIT_DIR)/split.subset.done | dir/$$(@D)
 	  touch $@
 
 GMM_DIR=$(TRI2_DIR)
@@ -241,14 +265,48 @@ ALI_NAME=tri2_ali
 ALI_DIR=$(EXP_DIR)/$(ALI_NAME)
 DBN_DNN_DIR=$(DBN_DIR)/$(ALI_NAME)
 
+#ifeq ($(PRETRAIN_TYPE),gcc)
+#	$(CC) -o foo $(objects) $(libs_for_gcc)
+#else
+#	$(CC) -o foo $(objects) $(normal_libs)
+#endif
+
 FEATURE_TRANSFORM_DNN=$(DBN_DIR)/final.feature_transform 
 dbn.train.done: $(DBN_DNN_DIR)/dbn.train.done
-$(DBN_DNN_DIR)/dbn.train.done: $(DBN_DIR)/dbn.done $(ALI_DIR)/ali.done | dir/$$(@D)
+$(DBN_PRE_DIR)/dnn_dbn/$(ALI_NAME)/dbn.train.done: $(DBN_DIR)/dbn.done $(ALI_DIR)/ali.done | dir/$$(@D)
 	steps/nnet/train.sh --dbn $(DBN) --hid-layers 0 --learn-rate 0.008 --feature-transform $(FEATURE_TRANSFORM_DNN) $(NNET_TRAIN_DIR) $(NNET_CV_DIR) $(LANG_DIR) $(ALI_DIR) $(ALI_DIR) $(DBN_DNN_DIR)
 	touch $@
 
-#TODO: make dev data...?
-#QA lang vs lang_nosp
+no_pre.done: $(DBN_PRE_DIR)/no_pre/dbn.train.done
+$(DBN_PRE_DIR)/no_pre/$(ALI_NAME)/dbn.train.done: $(ALI_DIR)/ali.done
+	steps/nnet/train.sh --hid-layers $(NN_DEPTH) --learn-rate 0.008 $(NNET_TRAIN_DIR) $(NNET_CV_DIR) $(LANG_DIR) $(ALI_DIR) $(ALI_DIR) $(@D)
+	touch $@
+
+auto.train.done: $(DBN_PRE_DIR)/no_pre/$(ALI_NAME)/dbn.train.done
+$(DBN_PRE_DIR)/no_pre/$(ALI_NAME)/dbn.train.done: $(ALI_DIR)/ali.done
+	steps/nnet/train.sh --hid-layers $(NN_DEPTH) --learn-rate 0.008 $(NNET_TRAIN_DIR) $(NNET_CV_DIR) $(LANG_DIR) $(ALI_DIR) $(ALI_DIR) $(@D)
+	touch $@
+
+cnn.train.done: $(DBN_PRE_DIR)/cnn/$(ALI_NAME)/dbn.train.done
+$(DBN_PRE_DIR)/cnn/$(ALI_NAME)/dbn.train.done: $(ALI_DIR)/ali.done
+	steps/nnet/train.sh \
+      --cmvn-opts "--norm-means=true --norm-vars=true" \
+      --delta-opts "--delta-order=2" --splice 5 \
+      --network-type cnn1d --cnn-proto-opts "--patch-dim1 8 --pitch-dim 3" \
+      --hid-layers $(NN_DEPTH) --learn-rate 0.008 \
+      $(NNET_TRAIN_DIR) $(NNET_CV_DIR) data/lang $(ALI_DIR) $(ALI_DIR) $(@D) 
+	touch $@
+
+lstm: $(DBN_PRE_DIR)/lstm/$(ALI_NAME)/dbn.train.done
+$(DBN_PRE_DIR)/lstm/$(ALI_NAME)/dbn.train.done: $(ALI_DIR)/ali.done
+	steps/nnet/train.sh --network-type lstm --learn-rate 0.0001 \
+	--cmvn-opts "--norm-means=true --norm-vars=true" --feat-type plain --splice 0 \
+	--scheduler-opts "--momentum 0.9 --halving-factor 0.5" \
+	--train-tool "nnet-train-lstm-streams" \
+	--train-tool-opts "--num-stream=4 --targets-delay=5" \
+	--proto-opts "--num-cells 512 --num-recurrent 200 --num-layers 2 --clip-gradient 5.0" \
+	$(NNET_TRAIN_DIR) $(NNET_CV_DIR) $(LANG_DIR) $(ALI_DIR) $(ALI_DIR) $(@D)
+	touch $@
 
 LOCAL_DICT_DIR=$(LOCAL_DIR)/dict
 lang2.done: $(DATA_DIR)/lang2.done
@@ -265,18 +323,20 @@ $(DATA_DIR)/lang2.done:
 	touch $@
 
 DECODE_NNET_NJ=2
-GRAPH_TYPE=graph
 GRAPH_TYPE=graph_nosp
-DECODE_NNET_DIR=$(DBN_DNN_DIR)/$(GRAPH_TYPE)
-decode.dev.dnn.done: $(DECODE_NNET_DIR)/decode.dev.dnn.done 
-$(DECODE_NNET_DIR)/decode.dev.dnn.done: $(DBN_DNN_DIR)/dbn.train.done
-	steps/nnet/decode.sh --nj $(DECODE_NNET_NJ) --cmd "$(DECODE_CMD)" --config conf/decode_dnn.config --acwt 0.1 $(GMM_DIR)/$(GRAPH_TYPE) $(DATA_TRANS_DIR)/dev $(DBN_DNN_DIR)/$(GRAPH_TYPE)_decode_dev
+GRAPH_TYPE=graph
+decode.dev.dnn.done: $(DBN_DNN_DIR)/$(GRAPH_TYPE)_decode_dev/decode.dev.dnn.done 
+$(DBN_DNN_DIR)/$(GRAPH_TYPE)_decode_dev/decode.dev.dnn.done: $(DBN_DNN_DIR)/dbn.train.done
+	steps/nnet/decode.sh --nj $(DECODE_NNET_NJ) --cmd "$(DECODE_CMD)" --config conf/decode_dnn.config --acwt 0.1 $(GMM_DIR)/$(GRAPH_TYPE) $(DATA_TRANS_DIR)/dev $(@D)
 	touch $@
 
-decode.test.dnn.done: $(DECODE_NNET_DIR)/decode.test.dnn.done
-$(DECODE_NNET_DIR)/decode.test.dnn.done: $(DECODE_NNET_DIR)/decode.dev.dnn.done
-	steps/nnet/decode.sh --nj $(DECODE_NNET_NJ) --cmd "$(DECODE_CMD)" --config conf/decode_dnn.config --acwt 0.1 $(GMM_DIR)/$(GRAPH_TYPE) $(DATA_TRANS_DIR)/test $(DBN_DNN_DIR)/$(GRAPH_TYPE)_decode_test
+decode.test.dnn.done: $(DBN_DNN_DIR)/$(GRAPH_TYPE)_decode_test/decode.test.dnn.done
+$(DBN_DNN_DIR)/$(GRAPH_TYPE)_decode_test/decode.test.dnn.done: $(DBN_DNN_DIR)/$(GRAPH_TYPE)_decode_dev/decode.dev.dnn.done
+	steps/nnet/decode.sh --nj $(DECODE_NNET_NJ) --cmd "$(DECODE_CMD)" --config conf/decode_dnn.config --acwt 0.1 $(GMM_DIR)/$(GRAPH_TYPE) $(DATA_TRANS_DIR)/test $(@D)
 	touch $@
+
+
+	
 
 
 MAT_LDA_GMM_DIR=$(TRI2_ALI_DIR)
